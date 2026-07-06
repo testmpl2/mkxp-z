@@ -317,91 +317,79 @@ RB_METHOD_GUARD(bitmapBlendBlt) {
         return self;
     }
 
+    // Wrap multiple statements in a do { ... } while(0) block
     GFX_GUARD_EXC(
-        int dst_width = b->width();
-        int dst_height = b->height();
-        int src_width = src->width();
-        int src_height = src->height();
+        do {
+            int dst_width = b->width();
+            int dst_height = b->height();
+            int src_width = src->width();
+            int src_height = src->height();
 
-        IntRect srcIntRect = srcRect->toIntRect();
-        int drx = x;
-        int dry = y;
-        int drw = srcIntRect.w;
-        int drh = srcIntRect.h;
-        int srx = srcIntRect.x;
-        int sry = srcIntRect.y;
+            IntRect srcIntRect = srcRect->toIntRect();
+            int drx = x;
+            int dry = y;
+            int drw = srcIntRect.w;
+            int drh = srcIntRect.h;
+            int srx = srcIntRect.x;
+            int sry = srcIntRect.y;
 
-        // Quick reject: destination completely out of bounds
-        if (drx >= dst_width || dry >= dst_height) {
-            return self;
-        }
-
-        // Clip source rect (left/top) - negative source coordinates
-        if (srx < 0) {
-            drw += srx;  // srx is negative, so drw shrinks
-            srx = 0;
-        }
-        if (sry < 0) {
-            drh += sry;
-            sry = 0;
-        }
-
-        // Clip to source bounds (right/bottom)
-        drw = (drw > src_width - srx) ? (src_width - srx) : drw;
-        drh = (drh > src_height - sry) ? (src_height - sry) : drh;
-
-        // Clip destination left/top (negative destination coordinates)
-        if (drx < 0) {
-            srx -= drx;  // adjust source to compensate
-            drw += drx;  // drx is negative, so drw shrinks
-            drx = 0;
-        }
-        if (dry < 0) {
-            sry -= dry;
-            drh += dry;
-            dry = 0;
-        }
-
-        // Clip to destination bounds (right/bottom)
-        drw = (drw > dst_width - drx) ? (dst_width - drx) : drw;
-        drh = (drh > dst_height - dry) ? (dst_height - dry) : drh;
-
-        // Final validation
-        if (drw <= 0 || drh <= 0) {
-            return self;
-        }
-
-        // Clamp blend_type to valid range
-        if (blend_type < 0 || blend_type > 7) {
-            blend_type = 0;
-        }
-
-        // Pixel-by-pixel blending
-        for (int yy = 0; yy < drh; yy++) {
-            for (int xx = 0; xx < drw; xx++) {
-                int dst_x = drx + xx;
-                int dst_y = dry + yy;
-                int src_x = srx + xx;
-                int src_y = sry + yy;
-
-                Color dst_col = b->getPixel(dst_x, dst_y);
-                Color src_col = src->getPixel(src_x, src_y);
-
-                int r, g, b_val, a;
-                blendPixelAllModes(
-                    r, g, b_val, a,
-                    dst_col.red, dst_col.green, dst_col.blue, dst_col.alpha,
-                    src_col.red, src_col.green, src_col.blue, src_col.alpha,
-                    blend_type, opacity
-                );
-
-                b->setPixel(dst_x, dst_y, Color(r, g, b_val, a));
+            // Quick reject: destination completely out of bounds
+            if (drx >= dst_width || dry >= dst_height) {
+                return;
             }
-        }
+
+            // Clip source rect (left/top)
+            if (srx < 0) { drw += srx; srx = 0; }
+            if (sry < 0) { drh += sry; sry = 0; }
+
+            // Clip to source bounds
+            drw = (drw > src_width - srx) ? (src_width - srx) : drw;
+            drh = (drh > src_height - sry) ? (src_height - sry) : drh;
+
+            // Clip destination left/top
+            if (drx < 0) { srx -= drx; drw += drx; drx = 0; }
+            if (dry < 0) { sry -= dry; drh += dry; dry = 0; }
+
+            // Clip to destination bounds
+            drw = (drw > dst_width - drx) ? (dst_width - drx) : drw;
+            drh = (drh > dst_height - dry) ? (dst_height - dry) : drh;
+
+            if (drw <= 0 || drh <= 0) {
+                return;
+            }
+
+            if (blend_type < 0 || blend_type > 7) {
+                blend_type = 0;
+            }
+
+            // Pixel-by-pixel blending
+            for (int yy = 0; yy < drh; yy++) {
+                for (int xx = 0; xx < drw; xx++) {
+                    int dst_x = drx + xx;
+                    int dst_y = dry + yy;
+                    int src_x = srx + xx;
+                    int src_y = sry + yy;
+
+                    Color dst_col = b->getPixel(dst_x, dst_y);
+                    Color src_col = src->getPixel(src_x, src_y);
+
+                    int r, g, b_val, a;
+                    blendPixelAllModes(
+                        r, g, b_val, a,
+                        dst_col.red, dst_col.green, dst_col.blue, dst_col.alpha,
+                        src_col.red, src_col.green, src_col.blue, src_col.alpha,
+                        blend_type, opacity
+                    );
+
+                    b->setPixel(dst_x, dst_y, Color(r, g, b_val, a));
+                }
+            }
+        } while (0)
     );
 
     return self;
 }
+
 RB_METHOD_GUARD_END
 
 RB_METHOD_GUARD(bitmapStretchBlt) {
