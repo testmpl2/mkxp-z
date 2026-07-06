@@ -316,13 +316,13 @@ RB_METHOD_GUARD(bitmapBlendBlt) {
         return self;
     }
 
-    GFX_GUARD_EXC(
+    GFX_GUARD_EXC({
         do {
             int dst_width = b->width();
             int dst_height = b->height();
             int src_width = src->width();
             int src_height = src->height();
-
+    
             IntRect srcIntRect = srcRect->toIntRect();
             int drx = x;
             int dry = y;
@@ -330,12 +330,12 @@ RB_METHOD_GUARD(bitmapBlendBlt) {
             int drh = srcIntRect.h;
             int srx = srcIntRect.x;
             int sry = srcIntRect.y;
-
+    
             // Quick reject: destination completely out of bounds
             if (drx >= dst_width || dry >= dst_height) {
                 return;
             }
-
+    
             // Clip source rect (left/top) - negative source coordinates
             if (srx < 0) {
                 drw += srx;
@@ -345,11 +345,11 @@ RB_METHOD_GUARD(bitmapBlendBlt) {
                 drh += sry;
                 sry = 0;
             }
-
+    
             // Clip to source bounds (right/bottom)
             drw = (drw > src_width - srx) ? (src_width - srx) : drw;
             drh = (drh > src_height - sry) ? (src_height - sry) : drh;
-
+    
             // Clip destination left/top (negative destination coordinates)
             if (drx < 0) {
                 srx -= drx;
@@ -361,21 +361,21 @@ RB_METHOD_GUARD(bitmapBlendBlt) {
                 drh += dry;
                 dry = 0;
             }
-
+    
             // Clip to destination bounds (right/bottom)
             drw = (drw > dst_width - drx) ? (dst_width - drx) : drw;
             drh = (drh > dst_height - dry) ? (dst_height - dry) : drh;
-
+    
             // Final validation
             if (drw <= 0 || drh <= 0) {
                 return;
             }
-
+    
             // Clamp blend_type to valid range
             if (blend_type < 0 || blend_type > 7) {
                 blend_type = 0;
             }
-
+    
             // Pixel-by-pixel blending
             for (int yy = 0; yy < drh; yy++) {
                 for (int xx = 0; xx < drw; xx++) {
@@ -383,10 +383,10 @@ RB_METHOD_GUARD(bitmapBlendBlt) {
                     int dst_y = dry + yy;
                     int src_x = srx + xx;
                     int src_y = sry + yy;
-
+    
                     Color dst_col = b->getPixel(dst_x, dst_y);
                     Color src_col = src->getPixel(src_x, src_y);
-
+    
                     int r, g, b_val, a;
                     blendPixelAllModes(
                         r, g, b_val, a,
@@ -394,12 +394,12 @@ RB_METHOD_GUARD(bitmapBlendBlt) {
                         src_col.red, src_col.green, src_col.blue, src_col.alpha,
                         blend_type, opacity
                     );
-
+    
                     b->setPixel(dst_x, dst_y, Color(r, g, b_val, a));
                 }
             }
-        } while (0)
-    );
+        } while (0);
+    });
 
     return self;
 }
