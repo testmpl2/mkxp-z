@@ -495,7 +495,7 @@ RB_METHOD_GUARD(bitmapRadialBlur) {
     
     GFX_GUARD_EXC( b->radialBlur(angle, divisions); );
     
-    return Qnil;
+    return RUBY_Qnil;
 }
 RB_METHOD_GUARD_END
 
@@ -598,7 +598,7 @@ RB_METHOD_GUARD(bitmapSetPlaying){
     
     GFX_GUARD_EXC((play) ? b->play() : b->stop(););
     
-    return rb_bool_new(play);
+    return RUBY_Qnil;
 }
 RB_METHOD_GUARD_END
 
