@@ -153,6 +153,48 @@ RB_METHOD_GUARD(bitmapBlt) {
 }
 RB_METHOD_GUARD_END
 
+RB_METHOD_GUARD(bitmapBlendBlt) {
+    Bitmap *b = getPrivateData<Bitmap>(self);
+
+    int x, y;
+    VALUE srcObj;
+    VALUE srcRectObj;
+    int blend_type = 0;
+    int opacity = 255;
+
+    Bitmap *src;
+    Rect *srcRect;
+
+    rb_get_args(argc, argv, "iioo|ii", &x, &y, &srcObj, &srcRectObj, &blend_type, &opacity RB_ARG_END);
+
+    src = getPrivateDataCheck<Bitmap>(srcObj, BitmapType);
+    if (src) {
+        srcRect = getPrivateDataCheck<Rect>(srcRectObj, RectType);
+        if (!srcRect) {
+            raiseDisposedAccess(srcRectObj);
+            return self;
+        }
+
+        IntRect srcIntRect = srcRect->toIntRect();
+
+        /* Destination rectangle: use source rect size at destination position */
+        IntRect destRect = IntRect(x, y, abs(srcIntRect.w), abs(srcIntRect.h));
+
+        /* Map blend_type to BitmapBltMode (only two modes currently defined). */
+        Bitmap::BitmapBltMode mode = Bitmap::NORMAL;
+        if (blend_type == 1) {
+            mode = Bitmap::KGL_SUBTRACT;
+        }
+
+        GFX_GUARD_EXC(
+            b->stretchBlt(destRect, *src, srcIntRect, opacity, false, mode);
+        );
+    }
+
+    return self;
+}
+RB_METHOD_GUARD_END
+
 RB_METHOD_GUARD(bitmapStretchBlt) {
     Bitmap *b = getPrivateData<Bitmap>(self);
     
@@ -496,7 +538,7 @@ RB_METHOD_GUARD(bitmapSaveToFile) {
     
     GFX_GUARD_EXC(b->saveToFile(RSTRING_PTR(str)););
     
-    return RUBY_Qnil;
+    return rb_bool_new(play);
 }
 RB_METHOD_GUARD_END
 
@@ -556,7 +598,7 @@ RB_METHOD_GUARD(bitmapSetPlaying){
     
     GFX_GUARD_EXC((play) ? b->play() : b->stop(););
     
-    return RUBY_Qnil;
+    return rb_bool_new(play);
 }
 RB_METHOD_GUARD_END
 
@@ -914,6 +956,19 @@ RB_METHOD_GUARD(bitmapKglShadowShaderV) {
 }
 RB_METHOD_GUARD_END
 
+// NEW: Expose the native C++ Bitmap pointer for FFI compatibility
+// This allows external DLLs to work with mkxp-z, which uses sequential
+// object_id values instead of pointer-based ones like standard RGSS.
+RB_METHOD_GUARD(bitmapGetNativePointer) {
+    RB_UNUSED_PARAM;
+    
+    Bitmap *b = getPrivateData<Bitmap>(self);
+    
+    // Return the actual C++ pointer as a long integer
+    return LONG2NUM((long)b);
+}
+RB_METHOD_GUARD_END
+
 void bitmapBindingInit() {
     VALUE klass = rb_define_class("Bitmap", rb_cObject);
 #if RAPI_FULL > 187
@@ -934,6 +989,7 @@ void bitmapBindingInit() {
 
     _rb_define_method(klass, "rect", bitmapRect);
     _rb_define_method(klass, "blt", bitmapBlt);
+    _rb_define_method(klass, "blend_blt", bitmapBlendBlt);
     _rb_define_method(klass, "stretch_blt", bitmapStretchBlt);
     _rb_define_method(klass, "fill_rect", bitmapFillRect);
     _rb_define_method(klass, "clear", bitmapClear);
@@ -981,4 +1037,7 @@ void bitmapBindingInit() {
     _rb_define_method(klass, "_kgl_subtract_rect", bitmapKglSubtractRect);
     _rb_define_method(klass, "_kgl_shadow_shader_h", bitmapKglShadowShaderH);
     _rb_define_method(klass, "_kgl_shadow_shader_v", bitmapKglShadowShaderV);
+    
+    // NEW: Register the native pointer export method for FFI compatibility
+    _rb_define_method(klass, "_native_ptr", bitmapGetNativePointer);
 }
