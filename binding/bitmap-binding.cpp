@@ -194,7 +194,6 @@ RB_METHOD_GUARD(bitmapBlendBlt) {
     return self;
 }
 RB_METHOD_GUARD_END
-
 RB_METHOD_GUARD(bitmapStretchBlt) {
     Bitmap *b = getPrivateData<Bitmap>(self);
     
@@ -495,7 +494,7 @@ RB_METHOD_GUARD(bitmapRadialBlur) {
     
     GFX_GUARD_EXC( b->radialBlur(angle, divisions); );
     
-    return RUBY_Qnil;
+    return Qnil;
 }
 RB_METHOD_GUARD_END
 
@@ -538,7 +537,7 @@ RB_METHOD_GUARD(bitmapSaveToFile) {
     
     GFX_GUARD_EXC(b->saveToFile(RSTRING_PTR(str)););
     
-    return rb_bool_new(play);
+    return RUBY_Qnil;
 }
 RB_METHOD_GUARD_END
 
@@ -956,19 +955,6 @@ RB_METHOD_GUARD(bitmapKglShadowShaderV) {
 }
 RB_METHOD_GUARD_END
 
-// NEW: Expose the native C++ Bitmap pointer for FFI compatibility
-// This allows external DLLs to work with mkxp-z, which uses sequential
-// object_id values instead of pointer-based ones like standard RGSS.
-RB_METHOD_GUARD(bitmapGetNativePointer) {
-    RB_UNUSED_PARAM;
-    
-    Bitmap *b = getPrivateData<Bitmap>(self);
-    
-    // Return the actual C++ pointer as a long integer
-    return LONG2NUM((long)b);
-}
-RB_METHOD_GUARD_END
-
 void bitmapBindingInit() {
     VALUE klass = rb_define_class("Bitmap", rb_cObject);
 #if RAPI_FULL > 187
@@ -1037,7 +1023,4 @@ void bitmapBindingInit() {
     _rb_define_method(klass, "_kgl_subtract_rect", bitmapKglSubtractRect);
     _rb_define_method(klass, "_kgl_shadow_shader_h", bitmapKglShadowShaderH);
     _rb_define_method(klass, "_kgl_shadow_shader_v", bitmapKglShadowShaderV);
-    
-    // NEW: Register the native pointer export method for FFI compatibility
-    _rb_define_method(klass, "_native_ptr", bitmapGetNativePointer);
 }
