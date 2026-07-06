@@ -287,7 +287,6 @@ static inline void blendPixelAllModes(int& r, int& g, int& b, int& a,
     b = clamp(b);
     a = clamp(a);
 }
-
 RB_METHOD_GUARD(bitmapBlendBlt) {
     Bitmap *b = getPrivateData<Bitmap>(self);
 
@@ -317,7 +316,6 @@ RB_METHOD_GUARD(bitmapBlendBlt) {
         return self;
     }
 
-    // Wrap multiple statements in a do { ... } while(0) block
     GFX_GUARD_EXC(
         do {
             int dst_width = b->width();
@@ -338,26 +336,42 @@ RB_METHOD_GUARD(bitmapBlendBlt) {
                 return;
             }
 
-            // Clip source rect (left/top)
-            if (srx < 0) { drw += srx; srx = 0; }
-            if (sry < 0) { drh += sry; sry = 0; }
+            // Clip source rect (left/top) - negative source coordinates
+            if (srx < 0) {
+                drw += srx;
+                srx = 0;
+            }
+            if (sry < 0) {
+                drh += sry;
+                sry = 0;
+            }
 
-            // Clip to source bounds
+            // Clip to source bounds (right/bottom)
             drw = (drw > src_width - srx) ? (src_width - srx) : drw;
             drh = (drh > src_height - sry) ? (src_height - sry) : drh;
 
-            // Clip destination left/top
-            if (drx < 0) { srx -= drx; drw += drx; drx = 0; }
-            if (dry < 0) { sry -= dry; drh += dry; dry = 0; }
+            // Clip destination left/top (negative destination coordinates)
+            if (drx < 0) {
+                srx -= drx;
+                drw += drx;
+                drx = 0;
+            }
+            if (dry < 0) {
+                sry -= dry;
+                drh += dry;
+                dry = 0;
+            }
 
-            // Clip to destination bounds
+            // Clip to destination bounds (right/bottom)
             drw = (drw > dst_width - drx) ? (dst_width - drx) : drw;
             drh = (drh > dst_height - dry) ? (dst_height - dry) : drh;
 
+            // Final validation
             if (drw <= 0 || drh <= 0) {
                 return;
             }
 
+            // Clamp blend_type to valid range
             if (blend_type < 0 || blend_type > 7) {
                 blend_type = 0;
             }
@@ -389,6 +403,7 @@ RB_METHOD_GUARD(bitmapBlendBlt) {
 
     return self;
 }
+
 
 RB_METHOD_GUARD_END
 
