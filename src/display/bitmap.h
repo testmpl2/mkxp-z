@@ -136,6 +136,16 @@ public:
 	    NORMAL,
 	    KGL_SUBTRACT,
 	};
+	enum BlendMode {
+		BLEND_NORMAL = 0,
+		BLEND_ADD    = 1,
+		BLEND_SUB    = 2,
+		BLEND_MUL    = 3,
+		BLEND_DODGE  = 4,
+		BLEND_BURN   = 5,
+		BLEND_SCREEN = 6,
+		BLEND_OVERLAY= 7
+	};
 
 	void stretchBlt(IntRect destRect,
 	                const Bitmap &source, IntRect sourceRect,
@@ -234,6 +244,11 @@ public:
     void kglCompressAlpha();
     int kglShadowShaderH(int x1, int x2, int y, bool soft);
     int kglShadowShaderV(int y1, int y2, int x, bool wall, bool soft);
+
+	/* Blend copy from source to this bitmap using blend mode and opacity (0-255) */
+	void blendBlt(int x, int y,
+				  const Bitmap &source, const IntRect &rect,
+			   int blend_type = BLEND_NORMAL, int opacity = 255);
 
     // ----------
     

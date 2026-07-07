@@ -4212,6 +4212,252 @@ void Bitmap::taintArea(const IntRect &rect)
     p->addTaintedArea(rect);
 }
 
+// Helper: clamp to 0..255
+static inline int clamp255(int v) {
+    if (v < 0) return 0;
+    if (v > 255) return 255;
+    return v;
+}
+
+// Blend helpers adapted from your blend.cpp logic but using integer RGBA values
+static void blendAlphaRGBA(Uint8 &dr, Uint8 &dg, Uint8 &db, Uint8 &da,
+                           Uint8 sr, Uint8 sg, Uint8 sb, Uint8 sa,
+                           int opacity)
+{
+    int sa_i = sa * opacity / 255;
+    int da_i = da * (255 - sa_i) / 255;
+    if (sa_i < 255 && da_i == 0) {
+        // If source alpha small and dest alpha zero, copy source
+        dr = sr; dg = sg; db = sb; da = sa;
+        return;
+    }
+    int aa = da_i + sa_i;
+    if (aa == 0) {
+        dr = dg = db = da = 0;
+        return;
+    }
+    int r = ((int)dr * da_i + (int)sr * sa_i) / aa;
+    int g = ((int)dg * da_i + (int)sg * sa_i) / aa;
+    int b = ((int)db * da_i + (int)sb * sa_i) / aa;
+    dr = (Uint8)clamp255(r);
+    dg = (Uint8)clamp255(g);
+    db = (Uint8)clamp255(b);
+    da = (Uint8)clamp255(aa * 255 / 255); // aa already in 0..255 scale
+}
+
+// Dispatcher for blend modes using premultiplied-like logic
+static void blendPixelRGBA(Uint8 &d_r, Uint8 &d_g, Uint8 &d_b, Uint8 &d_a,
+                           Uint8 s_r, Uint8 s_g, Uint8 s_b, Uint8 s_a,
+                           int blend_type, int opacity)
+{
+    // Convert to premultiplied-like ints for some modes
+    int dr = (d_a == 255) ? d_r : (d_a == 0 ? 0 : (d_r * d_a / 255));
+    int dg = (d_a == 255) ? d_g : (d_a == 0 ? 0 : (d_g * d_a / 255));
+    int db = (d_a == 255) ? d_b : (d_a == 0 ? 0 : (d_b * d_a / 255));
+
+    int sr = (s_a == 255) ? s_r : (s_a == 0 ? 0 : (s_r * s_a / 255));
+    int sg = (s_a == 255) ? s_g : (s_a == 0 ? 0 : (s_g * s_a / 255));
+    int sb = (s_a == 255) ? s_b : (s_a == 0 ? 0 : (s_b * s_a / 255));
+
+    int r=0,g=0,b=0;
+
+    switch (blend_type) {
+        case Bitmap::BLEND_NORMAL:
+            blendAlphaRGBA(d_r, d_g, d_b, d_a, s_r, s_g, s_b, s_a, opacity);
+            return;
+
+        case Bitmap::BLEND_ADD:
+        {
+            int sa = s_a * opacity / 255;
+            if (sa == 0) return;
+            if (d_a == sa) {
+                r = d_r + s_r;
+                g = d_g + s_g;
+                b = d_b + s_b;
+            } else if (d_a > sa) {
+                r = d_r + s_r * sa / d_a;
+                g = d_g + s_g * sa / d_a;
+                b = d_b + s_b * sa / d_a;
+            } else {
+                r = d_r * d_a / sa + s_r;
+                g = d_g * d_a / sa + s_g;
+                b = d_b * d_a / sa + s_b;
+                d_a = (Uint8)clamp255(sa);
+            }
+            d_r = (Uint8)clamp255(r);
+            d_g = (Uint8)clamp255(g);
+            d_b = (Uint8)clamp255(b);
+            return;
+        }
+
+        case Bitmap::BLEND_SUB:
+        {
+            int sa = s_a * opacity / 255;
+            if (sa == 0) return;
+            if (d_a == sa) {
+                r = d_r - s_r;
+                g = d_g - s_g;
+                b = d_b - s_b;
+            } else if (d_a > sa) {
+                r = d_r - s_r * sa / d_a;
+                g = d_g - s_g * sa / d_a;
+                b = d_b - s_b * sa / d_a;
+            } else {
+                r = d_r * d_a / sa - s_r;
+                g = d_g * d_a / sa - s_g;
+                b = d_b * d_a / sa - s_b;
+                d_a = (Uint8)clamp255(sa);
+            }
+            d_r = (Uint8)clamp255(r);
+            d_g = (Uint8)clamp255(g);
+            d_b = (Uint8)clamp255(b);
+            return;
+        }
+
+        case Bitmap::BLEND_MUL:
+            r = dr * sr / 255;
+            g = dg * sg / 255;
+            b = db * sb / 255;
+            d_r = (Uint8)clamp255(r);
+            d_g = (Uint8)clamp255(g);
+            d_b = (Uint8)clamp255(b);
+            d_a = 255;
+            return;
+
+        case Bitmap::BLEND_DODGE:
+            if (sr == 255) r = 255; else r = dr * 255 / (255 - sr);
+            if (sg == 255) g = 255; else g = dg * 255 / (255 - sg);
+            if (sb == 255) b = 255; else b = db * 255 / (255 - sb);
+            d_r = (Uint8)clamp255(r);
+        d_g = (Uint8)clamp255(g);
+        d_b = (Uint8)clamp255(b);
+        d_a = 255;
+        return;
+
+        case Bitmap::BLEND_BURN:
+            if (sr == 0) r = 0; else r = 255 - ((255 - dr) * 255 / sr);
+            if (sg == 0) g = 0; else g = 255 - ((255 - dg) * 255 / sg);
+            if (sb == 0) b = 0; else b = 255 - ((255 - db) * 255 / sb);
+            d_r = (Uint8)clamp255(r);
+        d_g = (Uint8)clamp255(g);
+        d_b = (Uint8)clamp255(b);
+        d_a = 255;
+        return;
+
+        case Bitmap::BLEND_SCREEN:
+            r = 255 - ((255 - dr) * (255 - sr)) / 255;
+            g = 255 - ((255 - dg) * (255 - sg)) / 255;
+            b = 255 - ((255 - db) * (255 - sb)) / 255;
+            d_r = (Uint8)clamp255(r);
+            d_g = (Uint8)clamp255(g);
+            d_b = (Uint8)clamp255(b);
+            d_a = 255;
+            return;
+
+        case Bitmap::BLEND_OVERLAY:
+            if (dr < 128) r = dr * sr * 2 / 255;
+            else r = 2 * (dr + sr - dr * sr / 255) - 255;
+            if (dg < 128) g = dg * sg * 2 / 255;
+            else g = 2 * (dg + sg - dg * sg / 255) - 255;
+            if (db < 128) b = db * sb * 2 / 255;
+            else b = 2 * (db + sb - db * sb / 255) - 255;
+            d_r = (Uint8)clamp255(r);
+        d_g = (Uint8)clamp255(g);
+        d_b = (Uint8)clamp255(b);
+        d_a = 255;
+        return;
+
+        default:
+            return;
+    }
+}
+
+// Bitmap::blendBlt implementation
+void Bitmap::blendBlt(int x, int y,
+                      const Bitmap &source, const IntRect &rect,
+                      int blend_type, int opacity)
+{
+    guardDisposed();
+    // Do not support animated bitmaps for this CPU-side blend
+    ensureNonAnimated();
+    const IntRect srcRect = normalizedRect(rect);
+
+    // Ensure both bitmaps have CPU-side surfaces
+    // Destination
+    p->ensureFormat(p->surface ? p->surface : p->surface, p->format->format); // noop but keep format consistent
+    const_cast<Bitmap&>(*this).createSurface(); // createSurface() is const in header; use const_cast to call it
+    // Source
+    const_cast<Bitmap&>(source).createSurface();
+
+    SDL_Surface *dstSurf = p->surface;
+    SDL_Surface *srcSurf = source.p->surface;
+
+    if (!dstSurf || !srcSurf) return;
+
+    int d_width = dstSurf->w;
+    int d_height = dstSurf->h;
+    int s_width = srcSurf->w;
+    int s_height = srcSurf->h;
+
+    // Clip and compute effective rectangle
+    int drx = x;
+    int dry = y;
+    int drw = srcRect.w;
+    int drh = srcRect.h;
+    int srx = srcRect.x;
+    int sry = srcRect.y;
+
+    // Source rect clipping
+    if (srx < 0) { drw += srx; srx = 0; }
+    if (sry < 0) { drh += sry; sry = 0; }
+    if (srx + drw > s_width) drw = s_width - srx;
+    if (sry + drh > s_height) drh = s_height - sry;
+
+    // Destination clipping
+    if (drx < 0) { srx -= drx; drw += drx; drx = 0; }
+    if (dry < 0) { sry -= dry; drh += dry; dry = 0; }
+    if (drx + drw > d_width) drw = d_width - drx;
+    if (dry + drh > d_height) drh = d_height - dry;
+
+    if (drw <= 0 || drh <= 0) return;
+
+    SDL_LockSurface(dstSurf);
+    SDL_LockSurface(srcSurf);
+
+    SDL_PixelFormat *fmt = p->format; // destination format (both should share same format ideally)
+    SDL_PixelFormat *sfmt = source.p->format;
+
+    for (int yy = 0; yy < drh; ++yy) {
+        for (int xx = 0; xx < drw; ++xx) {
+            int dx = drx + xx;
+            int dy = dry + yy;
+            int sx = srx + xx;
+            int sy = sry + yy;
+
+            Uint32 dpx = ((Uint32*)dstSurf->pixels)[dy * d_width + dx];
+            Uint32 spx = ((Uint32*)srcSurf->pixels)[sy * s_width + sx];
+
+            Uint8 dr, dg, db, da;
+            Uint8 sr, sg, sb, sa;
+            SDL_GetRGBA(dpx, fmt, &dr, &dg, &db, &da);
+            SDL_GetRGBA(spx, sfmt, &sr, &sg, &sb, &sa);
+
+            blendPixelRGBA(dr, dg, db, da, sr, sg, sb, sa, blend_type, opacity);
+
+            Uint32 out = SDL_MapRGBA(fmt, dr, dg, db, da);
+            ((Uint32*)dstSurf->pixels)[dy * d_width + dx] = out;
+        }
+    }
+
+    SDL_UnlockSurface(srcSurf);
+    SDL_UnlockSurface(dstSurf);
+
+    // Mark tainted area
+    p->addTaintedArea(IntRect(drx, dry, drw, drh));
+    p->onModified(false);
+}
+
+
 int Bitmap::maxSize(){
     return glState.caps.maxTexSize;
 }
